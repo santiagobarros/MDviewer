@@ -4,6 +4,7 @@
 import CryptoKit
 import Foundation
 import RenderHelperKit
+import Security
 import WebKit
 
 let idleExitInterval: TimeInterval = 45
@@ -135,11 +136,31 @@ final class MermaidRender: NSObject, WKNavigationDelegate {
 
 // MARK: - XPC service
 
+/// Team identifier from this process's own signature; nil for ad-hoc builds.
+let ownTeamIdentifier: String? = {
+    var selfCode: SecCode?
+    guard SecCodeCopySelf([], &selfCode) == errSecSuccess, let selfCode else { return nil }
+    var staticCode: SecStaticCode?
+    guard SecCodeCopyStaticCode(selfCode, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+    var information: CFDictionary?
+    guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+          let info = information as? [String: Any],
+          let team = info[kSecCodeInfoTeamIdentifier as String] as? String, !team.isEmpty else {
+        return nil
+    }
+    return team
+}()
+
 final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate, RenderHelperProtocol {
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        // TODO(distribution): validate the connecting client's code signature
-        // once the app is signed with a real certificate.
+        // Only accept callers signed by the same team as this helper; ad-hoc
+        // dev builds carry no team, so the check is skipped there.
+        if let team = ownTeamIdentifier {
+            newConnection.setCodeSigningRequirement(
+                "anchor apple generic and certificate leaf[subject.OU] = \"\(team)\"")
+        }
+
         newConnection.exportedInterface = NSXPCInterface(with: RenderHelperProtocol.self)
         newConnection.exportedObject = self
         newConnection.resume()
