@@ -4,16 +4,15 @@
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <true/>
-    <key>com.apple.security.files.user-selected.read-only</key>
-    <true/>
-    <!-- The QL sandbox only grants access to the previewed file itself; this
-         read-only exception lets the preview load images the markdown references
-         (same approach as QLMarkdown). -->
-    <key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
+    <!-- Read-only access inside the user's home: lets previews load images the
+         markdown references and the shared Mermaid SVG cache. Quick Look itself
+         grants access to the previewed file; nothing outside home is reachable
+         and nothing is writable. -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
     <array>
         <string>/</string>
     </array>
-    <!-- Lets the extension reach the on-demand mermaid render helper agent. -->
+    <!-- Lets the extension reach the (optional) on-demand mermaid render helper. -->
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>
         <string>com.local.markdown-viewer.render-helper</string>
