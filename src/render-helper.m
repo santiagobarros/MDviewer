@@ -193,6 +193,11 @@ static NSMutableSet<MDVMermaidRender *> *MDVActiveRenderSet(void) {
 
 @implementation MDVHelperListenerDelegate
 
+// TODO(distribution): validate the connecting client's code signature (audit
+// token + SecCodeCheckValidity against our signing identity) once the app is
+// signed with a real certificate; ad-hoc signatures cannot anchor that check.
+// For the Mac App Store, replace the LaunchAgent + global mach service with
+// SMAppService and an app-group-prefixed service name.
 - (BOOL)listener:(NSXPCListener *)listener shouldAcceptNewConnection:(NSXPCConnection *)newConnection {
     newConnection.exportedInterface = [NSXPCInterface interfaceWithProtocol:@protocol(MDVRenderHelperProtocol)];
     newConnection.exportedObject = self;

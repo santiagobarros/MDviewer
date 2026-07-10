@@ -315,6 +315,10 @@ build_bundle() {
     plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
     bash -n "$RESOURCES_DIR/MarkdownViewer.sh"
 
+    # TODO(distribution): replace ad-hoc signing with a Developer ID certificate
+    # and notarization (xcrun notarytool) so Gatekeeper accepts downloads; a Mac
+    # App Store build instead needs an Apple Distribution cert + provisioning,
+    # App Sandbox on every binary, and no temporary-exception entitlements.
     if command -v codesign >/dev/null 2>&1; then
         if ! codesign --force --sign - --entitlements "$SRC_DIR/quicklook.entitlements" "$QL_APPEX_DIR" >/dev/null 2>&1; then
             printf 'Warning: ad-hoc codesign of the Quick Look extension failed; Finder previews may not work.\n' >&2
