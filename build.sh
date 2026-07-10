@@ -321,6 +321,8 @@ build_bundle() {
     cp "$SRC_DIR/set-default-handler.py" "$RESOURCES_DIR/set-default-handler.py"
     cp "$SRC_DIR/register-mermaid-helper.sh" "$RESOURCES_DIR/register-mermaid-helper.sh"
     chmod 755 "$RESOURCES_DIR/register-mermaid-helper.sh"
+    cp "$SRC_DIR/register-quicklook-extension.sh" "$RESOURCES_DIR/register-quicklook-extension.sh"
+    chmod 755 "$RESOURCES_DIR/register-quicklook-extension.sh"
     cp "$SCRIPT_DIR/LICENSE" "$RESOURCES_DIR/LICENSE"
 
     extract_npm_file "marked" "$MARKED_VERSION" "$MARKED_FILE" "$VENDOR_DIR/marked.umd.js" "$MARKED_SHA256"
@@ -435,6 +437,13 @@ build_installer() {
         --identifier "com.local.markdown-viewer.pkg.default-handler" \
         --version "$version" \
         "$pkg_dir/default-handler.pkg"
+
+    pkgbuild --quiet \
+        --nopayload \
+        --scripts "$scripts_dir/quicklook-preferred" \
+        --identifier "com.local.markdown-viewer.pkg.quicklook-preferred" \
+        --version "$version" \
+        "$pkg_dir/quicklook-preferred.pkg"
 
     pkgbuild --quiet \
         --nopayload \
