@@ -4,11 +4,12 @@
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <true/>
-    <!-- Read-only access inside the user's home: lets previews load images the
-         markdown references and the shared Mermaid SVG cache. Quick Look itself
-         grants access to the previewed file; nothing outside home is reachable
-         and nothing is writable. -->
-    <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+    <!-- Read-only filesystem access: lets previews load images the markdown
+         references (which can live anywhere — external volumes, /tmp, shared
+         folders) and the shared Mermaid SVG cache. Quick Look itself grants
+         access to the previewed file; nothing is writable. A home-relative
+         exception was tried and broke images for files outside the home. -->
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
     <array>
         <string>/</string>
     </array>
