@@ -3,8 +3,8 @@ import AppKit
 /// Only ever runs when the user picks "Check for Updates…" — the app makes no
 /// network requests on its own.
 enum UpdateChecker {
-    private static let releasesURL = URL(string: "https://api.github.com/repos/JackYoung27/MDviewer/releases/latest")!
-    private static let downloadURL = URL(string: "https://github.com/JackYoung27/MDviewer/releases/latest")!
+    private static let releasesURL = URL(string: "https://api.github.com/repos/santiagobarros/MDviewer/releases/latest")!
+    private static let downloadURL = URL(string: "https://github.com/santiagobarros/MDviewer/releases/latest")!
 
     static func check() {
         let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
