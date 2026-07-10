@@ -7,8 +7,8 @@
 static NSString *const MDVErrorDomain = @"com.local.markdown-viewer";
 static NSString *const MDVPreferredFontKey = @"MDVPreferredFont";
 static NSString *const MDVPreferredFontDidChangeNotification = @"MDVPreferredFontDidChangeNotification";
-static NSString *const MDVReleasesURL = @"https://api.github.com/repos/JackYoung27/MDviewer/releases/latest";
-static NSString *const MDVDownloadURL = @"https://github.com/JackYoung27/MDviewer/releases/latest";
+static NSString *const MDVReleasesURL = @"https://api.github.com/repos/santiagobarros/MDviewer/releases/latest";
+static NSString *const MDVDownloadURL = @"https://github.com/santiagobarros/MDviewer/releases/latest";
 
 static NSSet<NSString *> *MDVMarkdownExtensions(void) {
     static NSSet<NSString *> *extensions;
