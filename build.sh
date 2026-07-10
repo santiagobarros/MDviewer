@@ -410,6 +410,7 @@ build_installer() {
 
     pkgbuild --quiet \
         --root "$root_dir" \
+        --scripts "$SCRIPT_DIR/installer/scripts/app" \
         --identifier "com.local.markdown-viewer.pkg.app" \
         --version "$version" \
         --install-location "/" \
