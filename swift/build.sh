@@ -24,10 +24,44 @@ cp "$BIN/MarkdownViewerApp" "$APP_DIR/Contents/MacOS/MarkdownViewer"
 cp "$BIN/QuickLookPreview" "$APPEX_DIR/Contents/MacOS/MarkdownViewerQuickLook"
 cp "$BIN/RenderHelper" "$APP_DIR/Contents/MacOS/MarkdownViewerRenderHelper"
 
+# Same identity selection as the root build.sh: CODESIGN_IDENTITY override,
+# then Developer ID Application (hardened runtime + timestamp, the
+# notarization prerequisites), then Apple Development, then ad-hoc.
+resolve_signing_identity() {
+    if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+        printf '%s' "$CODESIGN_IDENTITY"
+        return
+    fi
+
+    local identity
+    identity="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
+    if [ -n "$identity" ]; then
+        printf '%s' "$identity"
+        return
+    fi
+
+    identity="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ {print $2; exit}')"
+    if [ -n "$identity" ]; then
+        printf '%s' "$identity"
+        return
+    fi
+
+    printf '%s' "-"
+}
+
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --sign - --entitlements "$ROOT_DIR/src/quicklook.entitlements" "$APPEX_DIR"
-    codesign --force --sign - "$APP_DIR/Contents/MacOS/MarkdownViewerRenderHelper"
-    codesign --force --sign - "$APP_DIR"
+    identity="$(resolve_signing_identity)"
+    sign_flags=()
+    case "$identity" in
+        "Developer ID Application"*)
+            sign_flags=(--options runtime --timestamp)
+            ;;
+    esac
+
+    codesign --force --sign "$identity" "${sign_flags[@]+"${sign_flags[@]}"}" --entitlements "$ROOT_DIR/src/quicklook.entitlements" "$APPEX_DIR"
+    codesign --force --sign "$identity" "${sign_flags[@]+"${sign_flags[@]}"}" "$APP_DIR/Contents/MacOS/MarkdownViewerRenderHelper"
+    codesign --force --sign "$identity" "${sign_flags[@]+"${sign_flags[@]}"}" "$APP_DIR"
+    echo "Signed with: $identity"
 fi
 
 echo "Done! Swift-powered bundle -> $APP_DIR"
