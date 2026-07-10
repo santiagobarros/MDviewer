@@ -81,7 +81,7 @@ cd mdviewer
 Designed to be inspectable and minimal:
 
 - The app makes **no network requests on its own** — "Check for Updates…" in the menu is the only network call, and only when you click it.
-- The Quick Look extension is **sandboxed**, with read-only access limited to your home folder (so previews can load images your markdown references, and the diagram cache). It cannot write anything or touch other volumes.
+- The Quick Look extension is **sandboxed** with read-only filesystem access (so previews can load images your markdown references — wherever the file lives — and the diagram cache). It cannot write anything. macOS additionally asks once before it can read images in privacy-protected folders like Desktop or Documents.
 - **No background processes by default.** The optional Mermaid helper (only if you install with `--with-mermaid-helper`) appears under Login Items as a background item; launchd spawns it on demand and it exits after 45 seconds idle. Remove it anytime: `launchctl bootout gui/$(id -u)/com.local.markdown-viewer.render-helper && rm ~/Library/LaunchAgents/com.local.markdown-viewer.render-helper.plist`
 - All vendored libraries (marked, DOMPurify, Mermaid, KaTeX, Geist) are downloaded from npm at build time and verified against pinned SHA-256 hashes.
 
