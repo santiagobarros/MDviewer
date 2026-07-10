@@ -237,20 +237,11 @@ static NSString *MDVSystemTheme(void) {
     return [style isEqualToString:@"Dark"] ? @"dark" : @"light";
 }
 
-static NSString *MDVCachedMermaidSVG(NSString *trimmedSource) {
-    NSString *hash = MDVSHA256Hex(trimmedSource);
-    NSString *cachePath = MDVMermaidCachePath();
-    NSString *systemTheme = MDVSystemTheme();
-    NSArray<NSString *> *themeOrder = [systemTheme isEqualToString:@"dark"] ? @[@"dark", @"light"] : @[@"light", @"dark"];
-    for (NSString *theme in themeOrder) {
-        NSString *filePath = [cachePath stringByAppendingPathComponent:
-                              [NSString stringWithFormat:@"%@-%@.svg", hash, theme]];
-        NSString *svg = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:NULL];
-        if (svg.length > 0) {
-            return svg;
-        }
-    }
-    return nil;
+static NSString *MDVCachedMermaidSVGForTheme(NSString *hash, NSString *theme) {
+    NSString *filePath = [MDVMermaidCachePath() stringByAppendingPathComponent:
+                          [NSString stringWithFormat:@"%@-%@.svg", hash, theme]];
+    NSString *svg = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:NULL];
+    return svg.length > 0 ? svg : nil;
 }
 
 // Cache miss: ask the on-demand launchd helper to render the diagram. launchd
@@ -278,17 +269,30 @@ static NSString *MDVRequestMermaidRender(NSString *trimmedSource) {
     return renderedSVG;
 }
 
+// Theme priority: an SVG matching the system appearance, then a live helper
+// render (which produces the system theme), then a stale-theme SVG as a last
+// resort — a wrong-theme diagram beats no diagram.
 static NSString *MDVMermaidSVGForSource(NSString *source) {
     NSString *trimmed = [source stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (trimmed.length == 0) {
         return nil;
     }
 
-    NSString *cached = MDVCachedMermaidSVG(trimmed);
-    if (cached) {
-        return cached;
+    NSString *hash = MDVSHA256Hex(trimmed);
+    NSString *systemTheme = MDVSystemTheme();
+
+    NSString *svg = MDVCachedMermaidSVGForTheme(hash, systemTheme);
+    if (svg) {
+        return svg;
     }
-    return MDVRequestMermaidRender(trimmed);
+
+    svg = MDVRequestMermaidRender(trimmed);
+    if (svg) {
+        return svg;
+    }
+
+    NSString *otherTheme = [systemTheme isEqualToString:@"dark"] ? @"light" : @"dark";
+    return MDVCachedMermaidSVGForTheme(hash, otherTheme);
 }
 
 static NSString *MDVApplyMermaidRendering(NSString *html) {

@@ -530,12 +530,51 @@
       return;
     }
 
-    figures.forEach((figure, index) => {
+    const renders = figures.map((figure, index) => {
       const source = figure.dataset.mermaidSource || "";
       figure.classList.remove("mermaid-diagram--error");
       setMermaidStatus(figure, "Rendering diagram...");
-      renderMermaidFigure(figure, source, generation, index);
+      return renderMermaidFigure(figure, source, generation, index);
     });
+
+    Promise.all(renders).then(() => cacheAlternateThemeDiagrams(figures, generation));
+  }
+
+  // Renders each diagram once more in the non-displayed theme and hands the
+  // SVG to the app's cache, so Quick Look previews match the system appearance
+  // whichever theme is active when they are generated.
+  async function cacheAlternateThemeDiagrams(figures, generation) {
+    const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mermaidRendered;
+    if (!handler || generation !== mermaidRenderGeneration || !window.mermaid) {
+      return;
+    }
+
+    const alternateTheme = getEffectiveTheme() === "dark" ? "light" : "dark";
+    window.mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: alternateTheme === "dark" ? "dark" : "default",
+    });
+
+    for (let index = 0; index < figures.length; index += 1) {
+      if (generation !== mermaidRenderGeneration) {
+        break;
+      }
+
+      const source = figures[index].dataset.mermaidSource || "";
+      if (!source) continue;
+
+      try {
+        const result = await window.mermaid.render(`mdv-mermaid-alt-${generation}-${index}`, source);
+        if (result.svg) {
+          handler.postMessage({ source, svg: result.svg, theme: alternateTheme });
+        }
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    configureMermaid();
   }
 
   function renderMermaidDiagrams(root) {

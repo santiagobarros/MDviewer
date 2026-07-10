@@ -43,7 +43,7 @@ MDviewer is different:
 - **GitHub Flavored Markdown** — tables, task lists, fenced code blocks
 - **Mermaid diagrams** — renders fenced `mermaid` diagrams inline, fully local
 - **LaTeX math** — renders inline `$...$` and block `$$...$$` math with bundled KaTeX
-- **Dark mode** — follows your macOS appearance setting
+- **Dark mode** — the app and Quick Look previews follow your macOS appearance setting, including Mermaid diagrams (rendered and cached in both themes)
 - **Secure** — HTML sanitized with [DOMPurify](https://github.com/cure53/DOMPurify), strict Content Security Policy
 - **Finder integration** — registers as default `.md` handler; double-click to open
 - **Quick Look** — press Space on a Markdown file in Finder for a fully rendered preview: tables, code, task lists, images, LaTeX math, and Mermaid diagrams (from the app's render cache — or live everywhere with the optional `--with-mermaid-helper` install flag)
@@ -67,9 +67,13 @@ MDviewer is different:
 ```bash
 git clone https://github.com/JackYoung27/mdviewer.git
 cd mdviewer
-./build.sh          # builds to dist/Markdown Viewer.app
-./install.sh        # optional: copies to /Applications and sets as default handler
-                    # add --with-mermaid-helper for live Mermaid in Quick Look
+./build.sh            # builds to dist/Markdown Viewer.app
+./build.sh installer  # builds dist/Markdown-Viewer-Installer.pkg — a standard
+                      # macOS installer with checkboxes for "default .md viewer"
+                      # and the optional Mermaid Quick Look helper
+./install.sh          # CLI alternative: copies to /Applications and sets as
+                      # default handler; add --with-mermaid-helper for live
+                      # Mermaid in Quick Look
 ```
 
 ## Permissions
