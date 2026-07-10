@@ -1,9 +1,12 @@
 #import <Cocoa/Cocoa.h>
+#import <CommonCrypto/CommonCrypto.h>
 #import <CoreServices/CoreServices.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <WebKit/WebKit.h>
 
 static NSString *const MDVErrorDomain = @"com.local.markdown-viewer";
+static NSString *const MDVPreferredFontKey = @"MDVPreferredFont";
+static NSString *const MDVPreferredFontDidChangeNotification = @"MDVPreferredFontDidChangeNotification";
 static NSString *const MDVReleasesURL = @"https://api.github.com/repos/JackYoung27/MDviewer/releases/latest";
 static NSString *const MDVDownloadURL = @"https://github.com/JackYoung27/MDviewer/releases/latest";
 
@@ -26,7 +29,42 @@ static NSError *MDVMakeError(NSInteger code, NSString *description) {
                            userInfo:@{NSLocalizedDescriptionKey: description ?: @"Unknown error."}];
 }
 
-@interface MDVPreviewWindowController : NSWindowController <NSWindowDelegate, WKNavigationDelegate, WKUIDelegate>
+static NSArray<NSString *> *MDVFontOptionValues(void) {
+    return @[@"serif", @"github", @"geist"];
+}
+
+static NSString *MDVPreferredFontValue(void) {
+    NSString *value = [[NSUserDefaults standardUserDefaults] stringForKey:MDVPreferredFontKey];
+    return value && [MDVFontOptionValues() containsObject:value] ? value : @"serif";
+}
+
+static NSString *MDVPreferredFontScript(void) {
+    NSString *value = MDVPreferredFontValue();
+    if ([value isEqualToString:@"serif"]) {
+        return @"document.documentElement.removeAttribute('data-font');";
+    }
+    return [NSString stringWithFormat:@"document.documentElement.setAttribute('data-font', '%@');", value];
+}
+
+// Rendered Mermaid SVGs are cached by content hash so the Quick Look
+// extension — which cannot run a browser engine — can reuse them.
+static NSString *MDVMermaidCacheDirectory(void) {
+    NSString *appSupport = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
+    return [[appSupport stringByAppendingPathComponent:@"Markdown Viewer"] stringByAppendingPathComponent:@"mermaid-cache"];
+}
+
+static NSString *MDVSHA256Hex(NSString *text) {
+    NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index += 1) {
+        [hex appendFormat:@"%02x", digest[index]];
+    }
+    return hex;
+}
+
+@interface MDVPreviewWindowController : NSWindowController <NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler>
 
 @property(nonatomic, copy) void (^closeHandler)(void);
 @property(nonatomic, strong) WKWebView *webView;
@@ -82,7 +120,64 @@ static NSError *MDVMakeError(NSInteger code, NSString *description) {
     [window.contentView addSubview:self.webView];
     [window setInitialFirstResponder:self.webView];
 
+    [self installPreferredFontUserScript];
+    [self.webView.configuration.userContentController addScriptMessageHandler:self name:@"mermaidRendered"];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(preferredFontDidChange:)
+                                                 name:MDVPreferredFontDidChangeNotification
+                                               object:nil];
+
     return self;
+}
+
+- (void)userContentController:(WKUserContentController *)userContentController
+      didReceiveScriptMessage:(WKScriptMessage *)message {
+    if (![message.name isEqualToString:@"mermaidRendered"] || ![message.body isKindOfClass:NSDictionary.class]) {
+        return;
+    }
+
+    NSDictionary *body = message.body;
+    NSString *source = [body[@"source"] isKindOfClass:NSString.class] ? body[@"source"] : nil;
+    NSString *svg = [body[@"svg"] isKindOfClass:NSString.class] ? body[@"svg"] : nil;
+    NSString *theme = [body[@"theme"] isKindOfClass:NSString.class] ? body[@"theme"] : nil;
+
+    static const NSUInteger MDVMaxCachedSVGLength = 4 * 1024 * 1024;
+    if (source.length == 0 || svg.length == 0 || svg.length > MDVMaxCachedSVGLength ||
+        !([theme isEqualToString:@"light"] || [theme isEqualToString:@"dark"])) {
+        return;
+    }
+
+    NSString *trimmedSource = [source stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (trimmedSource.length == 0) {
+        return;
+    }
+
+    NSString *cacheDirectory = MDVMermaidCacheDirectory();
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [[NSFileManager defaultManager] createDirectoryAtPath:cacheDirectory
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:NULL];
+        NSString *fileName = [NSString stringWithFormat:@"%@-%@.svg", MDVSHA256Hex(trimmedSource), theme];
+        [svg writeToFile:[cacheDirectory stringByAppendingPathComponent:fileName]
+              atomically:YES
+                encoding:NSUTF8StringEncoding
+                   error:NULL];
+    });
+}
+
+- (void)installPreferredFontUserScript {
+    WKUserContentController *contentController = self.webView.configuration.userContentController;
+    [contentController removeAllUserScripts];
+    WKUserScript *script = [[WKUserScript alloc] initWithSource:MDVPreferredFontScript()
+                                                  injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                                               forMainFrameOnly:YES];
+    [contentController addUserScript:script];
+}
+
+- (void)preferredFontDidChange:(NSNotification *)notification {
+    [self installPreferredFontUserScript];
+    [self.webView evaluateJavaScript:MDVPreferredFontScript() completionHandler:nil];
 }
 
 - (BOOL)hasLoadedDocument {
@@ -436,6 +531,7 @@ static void MDVFSEventCallback(ConstFSEventStreamRef streamRef,
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
+    [self.webView.configuration.userContentController removeScriptMessageHandlerForName:@"mermaidRendered"];
     [self stopWatchingSourceFile];
     [self clearPendingScrollRestore];
     if (self.closeHandler) {
@@ -533,6 +629,7 @@ decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
 @interface MDVAppDelegate : NSObject <NSApplicationDelegate, NSUserInterfaceValidations>
 
 @property(nonatomic, strong) NSMutableSet<MDVPreviewWindowController *> *windowControllers;
+@property(nonatomic, strong) NSWindow *settingsWindow;
 @property(nonatomic, assign) BOOL openedFileDuringLaunch;
 
 @end
@@ -567,6 +664,13 @@ decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
                                                 keyEquivalent:@""];
     aboutItem.target = NSApp;
     [appMenu addItem:aboutItem];
+    [appMenu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *settingsItem = [[NSMenuItem alloc] initWithTitle:@"Settings…"
+                                                          action:@selector(showSettings:)
+                                                   keyEquivalent:@","];
+    settingsItem.target = self;
+    [appMenu addItem:settingsItem];
     [appMenu addItem:[NSMenuItem separatorItem]];
 
     NSMenuItem *hideItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Hide %@", appName]
@@ -901,6 +1005,56 @@ decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
     [[self currentPreviewWindowController] revealSourceFile:sender];
 }
 
+- (void)showSettings:(id)sender {
+    if (!self.settingsWindow) {
+        NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 340.0, 164.0)
+                                                       styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable)
+                                                         backing:NSBackingStoreBuffered
+                                                           defer:NO];
+        window.title = @"Settings";
+        window.releasedWhenClosed = NO;
+
+        NSTextField *label = [NSTextField labelWithString:@"Document font:"];
+        label.font = [NSFont boldSystemFontOfSize:13.0];
+        label.frame = NSMakeRect(20.0, 122.0, 300.0, 20.0);
+        [window.contentView addSubview:label];
+
+        NSArray<NSString *> *titles = @[
+            @"Serif (default)",
+            @"GitHub (system sans)",
+            @"Geist (Next.js)",
+        ];
+        NSString *currentValue = MDVPreferredFontValue();
+        for (NSUInteger index = 0; index < titles.count; index += 1) {
+            NSButton *radio = [NSButton radioButtonWithTitle:titles[index]
+                                                      target:self
+                                                      action:@selector(fontSelectionChanged:)];
+            radio.frame = NSMakeRect(28.0, 88.0 - 26.0 * (CGFloat)index, 292.0, 24.0);
+            radio.tag = (NSInteger)index;
+            radio.state = [MDVFontOptionValues()[index] isEqualToString:currentValue]
+                ? NSControlStateValueOn
+                : NSControlStateValueOff;
+            [window.contentView addSubview:radio];
+        }
+
+        [window center];
+        self.settingsWindow = window;
+    }
+
+    [self.settingsWindow makeKeyAndOrderFront:sender];
+    [NSApp activateIgnoringOtherApps:YES];
+}
+
+- (void)fontSelectionChanged:(NSButton *)sender {
+    NSUInteger index = (NSUInteger)sender.tag;
+    if (index >= MDVFontOptionValues().count) {
+        return;
+    }
+
+    [[NSUserDefaults standardUserDefaults] setObject:MDVFontOptionValues()[index] forKey:MDVPreferredFontKey];
+    [[NSNotificationCenter defaultCenter] postNotificationName:MDVPreferredFontDidChangeNotification object:nil];
+}
+
 - (void)toggleDarkMode:(id)sender {
     MDVPreviewWindowController *controller = [self currentPreviewWindowController];
     if (controller && controller.isPreviewReady) {
@@ -932,7 +1086,7 @@ decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
     SEL action = item.action;
 
-    if (action == @selector(openDocument:)) {
+    if (action == @selector(openDocument:) || action == @selector(showSettings:)) {
         return YES;
     }
 

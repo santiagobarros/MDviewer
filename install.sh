@@ -17,6 +17,43 @@ require_command() {
     fi
 }
 
+# Registers the on-demand mermaid render helper with launchd. The agent owns
+# no running process at rest; launchd spawns it when the Quick Look extension
+# connects and it exits itself when idle.
+install_render_helper_agent() {
+    local agent_label="com.local.markdown-viewer.render-helper"
+    local agent_plist="$HOME/Library/LaunchAgents/$agent_label.plist"
+
+    mkdir -p "$HOME/Library/LaunchAgents"
+    cat > "$agent_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$agent_label</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$TARGET_APP/Contents/MacOS/MarkdownViewerRenderHelper</string>
+    </array>
+    <key>MachServices</key>
+    <dict>
+        <key>$agent_label</key>
+        <true/>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
+PLIST
+
+    launchctl bootout "gui/$(id -u)/$agent_label" >/dev/null 2>&1 || true
+    launchctl bootstrap "gui/$(id -u)" "$agent_plist" >/dev/null 2>&1 || \
+        launchctl load "$agent_plist" >/dev/null 2>&1 || \
+        printf 'Warning: could not register the mermaid render helper agent.\n' >&2
+    echo "render helper agent -> $agent_plist"
+}
+
 main() {
     require_command ditto
     require_command plutil
@@ -150,6 +187,8 @@ PY
 
     "$LSREGISTER" -kill -seed -r -domain local -domain system -domain user >/dev/null 2>&1 || true
     "$LSREGISTER" -f "$TARGET_APP" >/dev/null
+
+    install_render_helper_agent
 
     killall cfprefsd Finder >/dev/null 2>&1 || true
 

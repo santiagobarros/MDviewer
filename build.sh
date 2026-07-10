@@ -15,6 +15,11 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 LICENSES_DIR="$RESOURCES_DIR/licenses"
 VENDOR_DIR="$RESOURCES_DIR/vendor"
+PLUGINS_DIR="$CONTENTS_DIR/PlugIns"
+QL_APPEX_NAME="MarkdownViewerQuickLook"
+QL_APPEX_DIR="$PLUGINS_DIR/$QL_APPEX_NAME.appex"
+QL_MACOS_DIR="$QL_APPEX_DIR/Contents/MacOS"
+QL_RESOURCES_DIR="$QL_APPEX_DIR/Contents/Resources"
 ARCHIVE_PATH="$DIST_DIR/$ARCHIVE_NAME"
 ICON_SOURCE="$SCRIPT_DIR/assets/mdviewer.svg"
 ICON_NAME="AppIcon"
@@ -31,6 +36,10 @@ DOMPURIFY_SHA256="d448d28fdc0e16a906823f0f4db4688288c159bf6b82dc37a48949db4231d3
 MERMAID_VERSION="11.14.0"
 MERMAID_FILE="package/dist/mermaid.min.js"
 MERMAID_SHA256="217b66ef4279c33c141b4afe22effad10a91c02558dc70917be2c0981e78ed87"
+
+GEIST_VERSION="1.7.2"
+GEIST_FILE="package/dist/fonts/geist-sans/Geist-Variable.woff2"
+GEIST_SHA256="a369fcf5628ea2aa4e1b9e2ec6a5b3624e365bda588e1f0f2f12b564f728fbb8"
 
 KATEX_VERSION="0.16.45"
 KATEX_CSS_SHA256="23aefa0850248a16478b9f55d6b67028f74cc0b46b82b24dc22af068acaa4170"
@@ -143,6 +152,50 @@ build_native_binary() {
         -o "$MACOS_DIR/MarkdownViewer"
 }
 
+build_render_helper() {
+    clang \
+        -fobjc-arc \
+        -Wall \
+        -Wextra \
+        -Wno-unused-parameter \
+        -isysroot "$SDK_PATH" \
+        -framework Cocoa \
+        -framework WebKit \
+        "$SRC_DIR/render-helper.m" \
+        -o "$MACOS_DIR/MarkdownViewerRenderHelper"
+}
+
+build_quicklook_extension() {
+    mkdir -p "$QL_MACOS_DIR" "$QL_RESOURCES_DIR"
+
+    clang \
+        -fobjc-arc \
+        -fapplication-extension \
+        -mmacosx-version-min=12.0 \
+        -Wall \
+        -Wextra \
+        -Wno-unused-parameter \
+        -isysroot "$SDK_PATH" \
+        -framework Foundation \
+        -framework CoreGraphics \
+        -framework JavaScriptCore \
+        -framework QuickLookUI \
+        -framework UniformTypeIdentifiers \
+        -Wl,-e,_NSExtensionMain \
+        "$SRC_DIR/quicklook.m" \
+        -o "$QL_MACOS_DIR/$QL_APPEX_NAME"
+
+    cp "$SRC_DIR/QuickLook-Info.plist" "$QL_APPEX_DIR/Contents/Info.plist"
+    cp "$SRC_DIR/viewer.css" "$QL_RESOURCES_DIR/viewer.css"
+    rm -rf "$QL_RESOURCES_DIR/vendor"
+    mkdir -p "$QL_RESOURCES_DIR/vendor"
+    cp "$VENDOR_DIR/marked.umd.js" "$QL_RESOURCES_DIR/vendor/marked.umd.js"
+    cp "$VENDOR_DIR/katex.min.js" "$QL_RESOURCES_DIR/vendor/katex.min.js"
+    cp "$VENDOR_DIR/katex.min.css" "$QL_RESOURCES_DIR/vendor/katex.min.css"
+    cp -R "$VENDOR_DIR/fonts" "$QL_RESOURCES_DIR/vendor/fonts"
+    plutil -lint "$QL_APPEX_DIR/Contents/Info.plist" >/dev/null
+}
+
 rasterize_svg() {
     local svg_path="$1"
     local png_path="$2"
@@ -251,13 +304,25 @@ build_bundle() {
     extract_npm_file "katex" "$KATEX_VERSION" "package/dist/contrib/auto-render.min.js" "$VENDOR_DIR/katex-auto-render.min.js" "$KATEX_AUTO_RENDER_SHA256"
     extract_npm_dir "katex" "$KATEX_VERSION" "package/dist/fonts" "$VENDOR_DIR/fonts"
     extract_npm_file "katex" "$KATEX_VERSION" "package/LICENSE" "$LICENSES_DIR/katex-LICENSE"
+    mkdir -p "$VENDOR_DIR/geist"
+    extract_npm_file "geist" "$GEIST_VERSION" "$GEIST_FILE" "$VENDOR_DIR/geist/Geist-Variable.woff2" "$GEIST_SHA256"
+    extract_npm_file "geist" "$GEIST_VERSION" "package/LICENSE.txt" "$LICENSES_DIR/geist-LICENSE.txt"
+
+    build_render_helper
+    build_quicklook_extension
 
     chmod 755 "$RESOURCES_DIR/MarkdownViewer.sh"
     plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
     bash -n "$RESOURCES_DIR/MarkdownViewer.sh"
 
     if command -v codesign >/dev/null 2>&1; then
-        if ! codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1; then
+        if ! codesign --force --sign - --entitlements "$SRC_DIR/quicklook.entitlements" "$QL_APPEX_DIR" >/dev/null 2>&1; then
+            printf 'Warning: ad-hoc codesign of the Quick Look extension failed; Finder previews may not work.\n' >&2
+        fi
+        if ! codesign --force --sign - "$MACOS_DIR/MarkdownViewerRenderHelper" >/dev/null 2>&1; then
+            printf 'Warning: ad-hoc codesign of the render helper failed.\n' >&2
+        fi
+        if ! codesign --force --sign - "$APP_DIR" >/dev/null 2>&1; then
             printf 'Warning: ad-hoc codesign failed; continuing with unsigned bundle.\n' >&2
         elif ! codesign --verify --deep --strict "$APP_DIR" >/dev/null 2>&1; then
             printf 'Warning: codesign verification failed; continuing with bundle as built.\n' >&2

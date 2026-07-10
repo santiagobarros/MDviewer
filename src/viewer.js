@@ -484,6 +484,18 @@
         throw new Error("Rendered SVG was empty.");
       }
 
+      try {
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mermaidRendered) {
+          window.webkit.messageHandlers.mermaidRendered.postMessage({
+            source,
+            svg,
+            theme: getEffectiveTheme(),
+          });
+        }
+      } catch (postError) {
+        console.warn(postError);
+      }
+
       const image = document.createElement("img");
       image.className = "mermaid-diagram__image";
       image.alt = "Mermaid diagram";

@@ -46,6 +46,8 @@ MDviewer is different:
 - **Dark mode** — follows your macOS appearance setting
 - **Secure** — HTML sanitized with [DOMPurify](https://github.com/cure53/DOMPurify), strict Content Security Policy
 - **Finder integration** — registers as default `.md` handler; double-click to open
+- **Quick Look** — press Space on a Markdown file in Finder for a fully rendered preview: tables, code, task lists, images, LaTeX math, and Mermaid diagrams (rendered by a tiny on-demand helper that launchd spawns only when needed and that exits when idle)
+- **Font settings** — pick the document font in Settings (`Cmd+,`): Serif (default), GitHub, or Geist (the Next.js font, bundled)
 - **Tabbed windows** — multiple documents in one window
 - **Local-first** — no network calls, no telemetry, no accounts
 
@@ -66,8 +68,11 @@ MDviewer is different:
 git clone https://github.com/JackYoung27/mdviewer.git
 cd mdviewer
 ./build.sh          # builds to dist/Markdown Viewer.app
-./install.sh        # optional: copies to /Applications and sets as default handler
+./install.sh        # optional: copies to /Applications, sets as default handler,
+                    # and registers the on-demand Mermaid render helper agent
 ```
+
+To remove the helper agent later: `launchctl bootout gui/$(id -u)/com.local.markdown-viewer.render-helper && rm ~/Library/LaunchAgents/com.local.markdown-viewer.render-helper.plist`
 
 Requires Xcode Command Line Tools (`xcode-select --install`).
 
@@ -76,6 +81,7 @@ Requires Xcode Command Line Tools (`xcode-select --install`).
 | Action | Shortcut |
 |---|---|
 | Open file | `Cmd+O` |
+| Settings | `Cmd+,` |
 | Find in document | `Cmd+F` |
 | Next match | `Cmd+G` |
 | Previous match | `Cmd+Shift+G` |
