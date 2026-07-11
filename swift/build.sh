@@ -66,8 +66,16 @@ fi
 
 echo "Done! Swift-powered bundle -> $APP_DIR"
 
-# "installer" also wraps the Swift bundle in the .pkg wizard.
-if [ "${1:-build}" = "installer" ]; then
-    echo "Building installer around the Swift bundle..."
-    MDV_SKIP_BUILD=1 "$ROOT_DIR/build.sh" installer
-fi
+case "${1:-build}" in
+    installer)
+        # Wraps the Swift bundle in the .pkg wizard.
+        echo "Building installer around the Swift bundle..."
+        MDV_SKIP_BUILD=1 "$ROOT_DIR/build.sh" installer
+        ;;
+    archive)
+        ARCHIVE_PATH="$ROOT_DIR/dist/Markdown-Viewer-macOS.zip"
+        rm -f "$ARCHIVE_PATH"
+        ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ARCHIVE_PATH"
+        echo "Archive -> $ARCHIVE_PATH"
+        ;;
+esac

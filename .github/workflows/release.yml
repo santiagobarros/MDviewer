@@ -19,7 +19,7 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
 
       - name: Build archive
-        run: ./build.sh archive
+        run: ./swift/build.sh archive
 
       - name: Upload release asset
         env:
